@@ -1,0 +1,42 @@
+#!/bin/bash
+
+
+# setup the conda environment; adapted from https://github.com/UT-ADL/e2e-rally-estonia/blob/master/docs/Start_point.md
+module load any/python/3.8.3-conda
+#conda install -y mamba -n base -c conda-forge
+if { conda info -e | grep "^e2e\s"; }; then conda activate e2e
+else conda env create -f e2e.yml; conda activate e2e; fi
+
+wandb login
+
+
+cat << JOB > job.sh
+#!/bin/bash
+#SBATCH -J e2e
+#SBATCH --partition=gpu
+#SBATCH --gres gpu:tesla:1
+#SBATCH --cpus-per-task=16
+#SBATCH --mem-per-cpu=1GB
+#SBATCH --time 1-00:00:00
+
+cat job.sh
+
+rsync -a /gpfs/space/projects/rally2023/rally-estonia-cropped-antialias/ /tmp/    
+
+
+python train.py --input-modality nvidia-camera --output-modality steering_angle \
+    --patience 10 --max-epochs 100 \
+    --model-name steering-angle --model-type pilotnet-conditional \
+    --dataset-folder /tmp/rally-estonia-cropped-antialias \
+    --num-workers 16 \
+    --wandb-project adl-e2e
+
+JOB
+
+sbatch job.sh
+
+#rm job.sh
+
+mkdir -p logs
+mv slurm-*.out logs/
+
